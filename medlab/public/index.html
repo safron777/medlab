@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MedLab — Мои Анализы</title>
+  <meta name="description" content="Хранение и отслеживание медицинских анализов">
+  <meta name="theme-color" content="#00C9A7">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+<div class="toast-container" id="toasts"></div>
+
+<!-- ══════ AUTH SCREEN ══════ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🧬</div>
+      <div>
+        <div class="auth-logo-text">Med<span>Lab</span></div>
+      </div>
+    </div>
+    <h1 class="auth-title">Добро пожаловать</h1>
+    <p class="auth-subtitle">Управляйте своими медицинскими анализами в одном месте</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Вход</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">Регистрация</button>
+    </div>
+    <!-- Login -->
+    <div id="login-form">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="login-email" class="form-input" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary btn-full mt-3" onclick="login()" id="login-btn">Войти</button>
+    </div>
+    <!-- Register -->
+    <div id="register-form" class="hidden">
+      <div class="form-group">
+        <label class="form-label">Ваше имя</label>
+        <input type="text" id="reg-name" class="form-input" placeholder="Иван Иванов" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="reg-email" class="form-input" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" id="reg-password" class="form-input" placeholder="Минимум 6 символов" autocomplete="new-password">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Пол</label>
+          <select id="reg-sex" class="form-input">
+            <option value="">Не указан</option>
+            <option value="male">Мужской</option>
+            <option value="female">Женский</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата рождения</label>
+          <input type="date" id="reg-birthdate" class="form-input">
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full mt-3" onclick="register()" id="register-btn">Создать аккаунт</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ MAIN APP ══════ -->
+<div class="app hidden" id="main-app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-logo">Med<span>Lab</span></span>
+      <span class="topbar-badge">PWA</span>
+    </div>
+    <div class="topbar-right" id="topbar-right">
+      <div class="member-switcher-wrap" id="member-switcher-wrap">
+        <button class="member-switch-btn" id="member-switch-btn" onclick="toggleMemberDropdown()">
+          <span id="member-current-label">Я</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="member-dropdown hidden" id="member-dropdown"></div>
+      </div>
+      <div class="user-avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Выйти</button>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Dashboard ── -->
+  <div class="page active" id="page-home">
+    <div class="content">
+      <div class="greeting">
+        <h1 id="greeting-text">Привет! 👋</h1>
+        <p id="greeting-date" class="text-muted"></p>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card" style="--accent:var(--teal)">
+          <div class="stat-icon">🧪</div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Всего анализов</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--amber)">
+          <div class="stat-icon">⚠️</div>
+          <div class="stat-value" id="stat-out">0</div>
+          <div class="stat-label">Вне нормы</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--blue)">
+          <div class="stat-icon">📅</div>
+          <div class="stat-value" id="stat-month">0</div>
+          <div class="stat-label">В этом месяце</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--green)">
+          <div class="stat-icon">✅</div>
+          <div class="stat-value" id="stat-ok">0</div>
+          <div class="stat-label">В норме</div>
+        </div>
+      </div>
+
+      <div id="notif-banner"></div>
+      <div id="yearly-summary"></div>
+      <div id="calc-indicators"></div>
+      <div id="upcoming-visits"></div>
+      <div class="section-header">
+        <div class="section-title">Последние анализы</div>
+        <button class="btn btn-ghost btn-sm" onclick="showPage('analyses')">Все</button>
+      </div>
+      <div id="recent-tests"></div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Analyses ── -->
+  <div class="page" id="page-analyses">
+    <div class="content">
+      <div class="section-header mb-3">
+        <div class="section-title" id="analyses-page-title">Мои анализы</div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost btn-sm" onclick="openImportOverlay()">📥 Импорт</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddTest()">+ Добавить</button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" class="form-input" id="search-input" placeholder="Поиск анализов..." oninput="filterTests()">
+      </div>
+      <div class="filter-chips" id="category-chips">
+        <div class="chip active" data-cat="all" onclick="selectCategory(this,'all')">Все</div>
+        <div class="chip" data-cat="blood" onclick="selectCategory(this,'blood')">Кровь</div>
+        <div class="chip" data-cat="urine" onclick="selectCategory(this,'urine')">Моча</div>
+        <div class="chip" data-cat="biochem" onclick="selectCategory(this,'biochem')">Биохимия</div>
+        <div class="chip" data-cat="hormones" onclick="selectCategory(this,'hormones')">Гормоны</div>
+        <div class="chip" data-cat="vitamins" onclick="selectCategory(this,'vitamins')">Витамины</div>
+        <div class="chip" data-cat="other" onclick="selectCategory(this,'other')">Прочее</div>
+      </div>
+      <div id="all-tests"></div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Charts ── -->
+  <div class="page" id="page-charts">
+    <div class="content">
+      <div class="section-title mb-3">📈 Динамика показателей</div>
+      <div id="charts-container"></div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Profile / Settings ── -->
+  <div class="page" id="page-profile">
+    <div class="content">
+      <div class="section-title mb-3">Профиль</div>
+      <div class="stat-card mb-3" style="--accent:var(--purple)">
+        <div class="flex gap-3" style="align-items:center">
+          <div class="user-avatar" id="profile-avatar" style="width:52px;height:52px;font-size:20px;">?</div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:18px;font-weight:700" id="profile-name">—</div>
+            <div class="text-muted text-sm" id="profile-email">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-section mb-3" id="family-section">
+        <div style="padding:14px 20px 6px;font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">Профили семьи</div>
+        <div id="members-list-profile"></div>
+        <div class="settings-item" onclick="openAddMember()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(139,92,246,0.1)">👨‍👩‍👧</div>
+            <div>
+              <div class="settings-item-title">Добавить профиль</div>
+              <div class="settings-item-sub">Вести анализы для члена семьи</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      </div>
+      <div class="settings-section mb-3">
+        <div class="settings-item" onclick="openProfileEdit()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(139,92,246,0.1)">✏️</div>
+            <div>
+              <div class="settings-item-title">Редактировать профиль</div>
+              <div class="settings-item-sub" id="profile-meta-sub">Пол и дата рождения не указаны</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-item" id="notif-settings-item" onclick="toggleNotifications()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(59,130,246,0.1)">🔔</div>
+            <div>
+              <div class="settings-item-title">Напоминания о визитах</div>
+              <div class="settings-item-sub" id="notif-status-label">Проверка...</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" onclick="openAddTest()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(0,201,167,0.1)">🧪</div>
+            <div>
+              <div class="settings-item-title">Добавить анализ</div>
+              <div class="settings-item-sub">Новая запись результатов</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" onclick="printFullReport()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(0,201,167,0.1)">📄</div>
+            <div>
+              <div class="settings-item-title">Полный отчёт PDF</div>
+              <div class="settings-item-sub">Все анализы для врача</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" onclick="exportData()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(59,130,246,0.1)">💾</div>
+            <div>
+              <div class="settings-item-title">Создать бэкап (JSON)</div>
+              <div class="settings-item-sub" id="backup-status-sub">—</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" onclick="importData()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(59,130,246,0.1)">📥</div>
+            <div>
+              <div class="settings-item-title">Восстановить из бэкапа</div>
+              <div class="settings-item-sub">Импорт JSON-файла</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" onclick="if(confirm('Выйти из аккаунта?')) logout()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(239,68,68,0.1)">🚪</div>
+            <div><div class="settings-item-title text-red">Выйти</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="text-center text-xs text-muted mt-4" style="opacity:0.5">MedLab v1.0 • Ваши данные защищены</div>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home" onclick="showPage('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Главная
+    </button>
+    <button class="nav-btn" id="nav-analyses" onclick="showPage('analyses')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+      Анализы
+    </button>
+    <button class="nav-btn" id="nav-charts" onclick="showPage('charts')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Динамика
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="showPage('profile')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Профиль
+    </button>
+  </nav>
+</div>
+
+<!-- ══════ DRAWER: Add/Edit Test ══════ -->
+<div class="overlay" id="add-test-overlay" onclick="closeOverlayIfBg(event,'add-test-overlay')">
+  <div class="drawer" id="add-test-drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-title" id="drawer-title">Новый анализ</div>
+    <div style="padding:0 24px">
+      <div class="form-group">
+        <label class="form-label">Название анализа</label>
+        <input type="text" id="test-name" class="form-input" placeholder="Общий анализ крови">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Категория</label>
+          <select id="test-category" class="form-input">
+            <option value="blood">Кровь</option>
+            <option value="urine">Моча</option>
+            <option value="biochem">Биохимия</option>
+            <option value="hormones">Гормоны</option>
+            <option value="vitamins">Витамины</option>
+            <option value="other">Прочее</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата анализа</label>
+          <input type="date" id="test-date" class="form-input">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Лаборатория / Клиника</label>
+        <input type="text" id="test-lab" class="form-input" placeholder="Инвитро, Гемотест...">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Назначивший врач</label>
+          <input type="text" id="test-doctor" class="form-input" placeholder="Иванова А.В.">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Следующий визит</label>
+          <input type="date" id="test-next-visit" class="form-input">
+        </div>
+      </div>
+
+      <div class="section-title mb-2 mt-3" style="font-size:14px">Показатели</div>
+      <div class="param-form-row-header">
+        <span>Показатель</span><span>Значение</span><span>Ед.изм.</span><span>Норма</span><span></span>
+      </div>
+      <div id="params-list"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addParamRow()" style="margin-top:4px">+ Добавить показатель</button>
+
+      <div class="form-group mt-4">
+        <label class="form-label">Заключение / Направление врача</label>
+        <textarea id="test-conclusion" class="form-input" rows="3" placeholder="Данные из направления или официального заключения..." style="border-left:3px solid var(--blue)"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Примечания (личные)</label>
+        <textarea id="test-notes" class="form-input" placeholder="Самочувствие, вопросы к врачу..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Прикрепить файл <span class="text-muted text-xs">(фото бланка, PDF, до 3 МБ)</span></label>
+        <div class="attachment-zone" id="attachment-zone">
+          <span id="attachment-zone-label">📎 Нажмите или перетащите файл</span>
+          <input type="file" id="test-attachment" accept="image/*,.pdf" onchange="handleAttachmentChange(this)">
+        </div>
+        <div class="attachment-preview" id="attachment-preview"></div>
+      </div>
+
+      <div class="flex gap-2 mt-4" style="padding-bottom:8px">
+        <button class="btn btn-ghost" onclick="closeOverlay('add-test-overlay')" style="flex:1">Отмена</button>
+        <button class="btn btn-primary" onclick="saveTest()" style="flex:2" id="save-test-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ OVERLAY: Test Detail ══════ -->
+<div class="overlay modal-mode" id="detail-overlay" onclick="closeOverlayIfBg(event,'detail-overlay')">
+  <div class="modal" id="detail-modal">
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- ══════ OVERLAY: Add/Edit Member ══════ -->
+<div class="overlay modal-mode" id="member-edit-overlay" onclick="closeOverlayIfBg(event,'member-edit-overlay')">
+  <div class="modal" style="max-width:400px">
+    <div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:20px" id="member-overlay-title">Добавить профиль</div>
+    <div class="form-group">
+      <label class="form-label">Имя</label>
+      <input type="text" id="member-name" class="form-input" placeholder="Мария Иванова">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Кем приходится</label>
+      <select id="member-relation" class="form-input">
+        <option value="partner">Партнёр / Супруг(а)</option>
+        <option value="child">Ребёнок</option>
+        <option value="parent">Родитель</option>
+        <option value="other">Другое</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Пол</label>
+        <select id="member-sex" class="form-input">
+          <option value="">Не указан</option>
+          <option value="male">Мужской</option>
+          <option value="female">Женский</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата рождения</label>
+        <input type="date" id="member-birthdate" class="form-input">
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeOverlay('member-edit-overlay')">Отмена</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveMember()" id="save-member-btn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ OVERLAY: Import PDF ══════ -->
+<div class="overlay modal-mode" id="import-overlay" onclick="closeOverlayIfBg(event,'import-overlay')">
+  <div class="modal" style="max-width:560px;max-height:88vh">
+    <div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:4px">📥 Импорт анализов</div>
+    <div class="text-muted text-sm mb-3">Загрузите PDF из лаборатории или вставьте текст</div>
+
+    <div id="import-step-1">
+      <div class="import-drop-zone" id="import-drop-zone">
+        <div style="font-size:32px;margin-bottom:8px">📄</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">Перетащите PDF или нажмите</div>
+        <div class="text-xs text-muted">Инвитро, Гемотест, Helix и другие</div>
+        <input type="file" id="import-pdf-input" accept=".pdf,application/pdf" onchange="handleImportPDF(this)">
+      </div>
+      <div class="divider">или</div>
+      <div class="form-group">
+        <label class="form-label">Вставьте текст из PDF / буфера обмена</label>
+        <textarea id="import-text-input" class="form-input" rows="5" placeholder="Гемоглобин    145    г/л    130 - 170&#10;Глюкоза    5.2    ммоль/л    3.9 - 6.1"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="parseImportText()">Распознать</button>
+    </div>
+
+    <div id="import-step-2" class="hidden">
+      <div id="import-meta-form">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group">
+            <label class="form-label">Название анализа</label>
+            <input type="text" id="import-test-name" class="form-input" placeholder="Общий анализ крови">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дата</label>
+            <input type="date" id="import-test-date" class="form-input">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group">
+            <label class="form-label">Лаборатория</label>
+            <input type="text" id="import-test-lab" class="form-input" placeholder="Инвитро">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Категория</label>
+            <select id="import-test-category" class="form-input">
+              <option value="blood">Кровь</option>
+              <option value="biochem">Биохимия</option>
+              <option value="urine">Моча</option>
+              <option value="hormones">Гормоны</option>
+              <option value="vitamins">Витамины</option>
+              <option value="other">Прочее</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;font-weight:700;letter-spacing:.07em;margin-bottom:6px">Распознанные показатели — проверьте и исправьте</div>
+      <div style="overflow-x:auto;max-height:260px;overflow-y:auto">
+        <table class="import-preview-table" id="import-preview-table">
+          <thead><tr><th>Показатель</th><th>Значение</th><th>Ед.</th><th>Норма</th><th></th></tr></thead>
+          <tbody id="import-preview-body"></tbody>
+        </table>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-ghost" onclick="resetImport()">← Назад</button>
+        <button class="btn btn-primary" style="flex:1" onclick="confirmImport()" id="confirm-import-btn">Сохранить анализ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ OVERLAY: Disclaimer ══════ -->
+<div class="overlay modal-mode" id="disclaimer-overlay">
+  <div class="modal" style="max-width:460px">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:40px;margin-bottom:12px">⚕️</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;margin-bottom:8px">Важная информация</div>
+    </div>
+    <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);padding:16px;margin-bottom:20px;font-size:14px;line-height:1.7;color:var(--text-2)">
+      <strong style="color:var(--amber);display:block;margin-bottom:8px">Приложение не является медицинским устройством</strong>
+      MedLab предназначен для личного учёта результатов анализов. Интерпретацию медицинских данных, постановку диагноза и назначение лечения осуществляет только врач.<br><br>
+      При любых отклонениях от нормы или ухудшении самочувствия обратитесь к специалисту.
+    </div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:20px;text-align:center">
+      Референсные значения носят ориентировочный характер и могут отличаться в зависимости от лаборатории и методики исследования.
+    </div>
+    <button class="btn btn-primary btn-full" onclick="acceptDisclaimer()">Понятно, продолжить</button>
+  </div>
+</div>
+
+<!-- ══════ OVERLAY: Edit Profile ══════ -->
+<div class="overlay modal-mode" id="profile-edit-overlay" onclick="closeOverlayIfBg(event,'profile-edit-overlay')">
+  <div class="modal" style="max-width:420px">
+    <div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:20px">Редактировать профиль</div>
+    <div class="form-group">
+      <label class="form-label">Имя</label>
+      <input type="text" id="edit-name" class="form-input" placeholder="Иван Иванов">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Пол</label>
+        <select id="edit-sex" class="form-input">
+          <option value="">Не указан</option>
+          <option value="male">Мужской</option>
+          <option value="female">Женский</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата рождения</label>
+        <input type="date" id="edit-birthdate" class="form-input">
+      </div>
+    </div>
+    <div style="background:rgba(0,201,167,0.06);border:1px solid rgba(0,201,167,0.15);border-radius:var(--radius-xs);padding:10px 14px;font-size:12px;color:var(--text-2);margin-bottom:20px">
+      Пол и возраст используются для подбора персональных референсных значений анализов
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeOverlay('profile-edit-overlay')">Отмена</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveProfile()" id="save-profile-btn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
