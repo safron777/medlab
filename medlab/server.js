@@ -218,6 +218,62 @@ app.get('/api/tests/parameter/:name', auth, (req, res) => {
   res.json(history.sort((a, b) => new Date(a.date) - new Date(b.date)));
 });
 
+// ── EXPORT / IMPORT ──────────────────────────────────────────────────────────
+app.get('/api/export', auth, (req, res) => {
+  const users = readJSON(USERS_FILE);
+  const user = users.find(u => u.id === req.user.id);
+  if (!user) return res.status(404).json({ error: 'Not found' });
+
+  const allTests = readJSON(TESTS_FILE);
+  const userTests = allTests.filter(t => t.userId === req.user.id);
+
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    profile: { id: user.id, email: user.email, name: user.name, sex: user.sex, birthDate: user.birthDate },
+    members: user.members || [],
+    tests: userTests,
+  };
+
+  res.setHeader('Content-Disposition', `attachment; filename="medlab-backup-${new Date().toISOString().slice(0,10)}.json"`);
+  res.json(payload);
+});
+
+app.post('/api/import', auth, (req, res) => {
+  try {
+    const { profile, members, tests } = req.body;
+    if (!tests || !Array.isArray(tests)) return res.status(400).json({ error: 'Invalid backup format' });
+
+    // Update profile fields if provided
+    const users = readJSON(USERS_FILE);
+    const uIdx = users.findIndex(u => u.id === req.user.id);
+    if (uIdx === -1) return res.status(404).json({ error: 'Not found' });
+    if (profile) {
+      if (profile.name)      users[uIdx].name      = profile.name;
+      if (profile.sex)       users[uIdx].sex       = profile.sex;
+      if (profile.birthDate) users[uIdx].birthDate = profile.birthDate;
+    }
+    if (members && Array.isArray(members)) users[uIdx].members = members;
+    writeJSON(USERS_FILE, users);
+
+    // Merge tests: skip duplicates by id, re-assign userId to current user
+    const allTests = readJSON(TESTS_FILE);
+    const existingIds = new Set(allTests.filter(t => t.userId === req.user.id).map(t => t.id));
+    let imported = 0;
+    for (const t of tests) {
+      if (!existingIds.has(t.id)) {
+        allTests.push({ ...t, userId: req.user.id });
+        imported++;
+      }
+    }
+    writeJSON(TESTS_FILE, allTests);
+
+    res.json({ success: true, imported, skipped: tests.length - imported });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Serve SPA for all non-API routes
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

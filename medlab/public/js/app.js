@@ -1,4 +1,5 @@
 'use strict';
+/* global Chart */
 
 // ══════════════════════════════════════════════════════
 // CONFIG & STATE
@@ -664,20 +665,29 @@ function importData() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      // Support both array of tests and { tests: [...] } format
+      // Support both array of tests and full backup { tests, profile, members } format
       const importTests = Array.isArray(data) ? data : data.tests;
       if (!Array.isArray(importTests)) throw new Error('Неверный формат файла');
       if (!confirm(`Импортировать ${importTests.length} анализов? Существующие данные сохранятся.`)) return;
-      let imported = 0;
-      for (const t of importTests) {
-        if (!t.name || !t.date) continue;
-        const { id: _id, userId: _uid, createdAt: _ca, ...rest } = t;
-        await apiFetch('/api/tests', 'POST', { ...rest, memberId: currentMemberId || undefined });
-        imported++;
+
+      // Use bulk /api/import if full backup format, otherwise post one-by-one
+      if (!Array.isArray(data) && data.version) {
+        const res = await apiFetch('/api/import', 'POST', data);
+        await loadTests();
+        toast(`Импортировано ${res.imported}, пропущено дублей: ${res.skipped} ✓`, 'success');
+      } else {
+        let imported = 0;
+        for (const t of importTests) {
+          if (!t.name || !t.date) continue;
+          const { id: _id, userId: _uid, createdAt: _ca, ...rest } = t;
+          await apiFetch('/api/tests', 'POST', { ...rest });
+          imported++;
+        }
+        await loadTests();
+        toast(`Импортировано ${imported} анализов ✓`, 'success');
       }
-      await loadTests();
-      toast(`Импортировано ${imported} анализов ✓`, 'success');
       localStorage.setItem('medlab_last_backup', todayStr());
+      renderBackupStatus();
     } catch (err) {
       toast('Ошибка импорта: ' + err.message, 'error');
     }
@@ -1390,18 +1400,37 @@ function closeOverlay(id) { document.getElementById(id).classList.remove('open')
 function closeOverlayIfBg(e, id) { if (e.target.id === id) closeOverlay(id); }
 
 // ══════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════
+function openHtmlInNewTab(html) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// ══════════════════════════════════════════════════════
 // EXPORT
 // ══════════════════════════════════════════════════════
-function exportData() {
-  const data = JSON.stringify({ exportedAt: new Date().toISOString(), user: currentUser?.name, tests }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `medlab-backup-${todayStr()}.json`;
-  a.click(); URL.revokeObjectURL(url);
-  localStorage.setItem('medlab_last_backup', todayStr());
-  renderBackupStatus();
-  toast('Данные экспортированы ✓', 'success');
+async function exportData() {
+  try {
+    const res = await fetch(API + '/api/export', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Ошибка сервера');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `medlab-backup-${todayStr()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    localStorage.setItem('medlab_last_backup', todayStr());
+    renderBackupStatus();
+    toast('Бэкап скачан ✓', 'success');
+  } catch (err) {
+    toast('Ошибка экспорта: ' + err.message, 'error');
+  }
 }
 
 function renderBackupStatus() {
@@ -1597,10 +1626,7 @@ ${test.notes ? `<h2>Примечания</h2><div class="notes">${esc(test.notes
 </div>
 </body></html>`;
 
-  const w = window.open('', '_blank');
-  if (!w) { toast('Разрешите всплывающие окна для PDF', 'error'); return; }
-  w.document.write(html);
-  w.document.close();
+  openHtmlInNewTab(html);
 }
 
 function printFullReport() {
@@ -1651,10 +1677,7 @@ ${calcRows ? `<h2>Расчётные показатели</h2><table style="widt
 <div class="no-print" style="margin-top:20px"><button onclick="window.print()" style="padding:10px 24px;background:#00836e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">🖨 Печать / Сохранить PDF</button></div>
 </body></html>`;
 
-  const w = window.open('', '_blank');
-  if (!w) { toast('Разрешите всплывающие окна для PDF', 'error'); return; }
-  w.document.write(html);
-  w.document.close();
+  openHtmlInNewTab(html);
 }
 
 // Close member dropdown when clicking outside
