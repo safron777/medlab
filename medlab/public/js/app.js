@@ -533,46 +533,58 @@ async function handleImportPDF(input) {
 }
 
 function parseLabText(rawText) {
+  const num  = '[\\d][.,\\d]*';                          // число (целое или дробное)
+  const unit = '\\S{1,15}';                              // единица (любой непробельный, вкл. ×10⁹/л)
+  const ref  = `(${num})\\s*[-–—]\\s*(${num})`;         // диапазон Low – High
+  const name = '([А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z0-9 /,()\\.\\-]{1,50}?)'; // имя показателя
+
+  const patterns = [
+    // Табуляция: Имя\tЗначение\tЕд\tLow – High
+    new RegExp(`^${name}\\t(${num})\\t(${unit})\\t${ref}`),
+    // Табуляция без диапазона: Имя\tЗначение\tЕд
+    new RegExp(`^${name}\\t(${num})\\t(${unit})\\s*$`),
+    // 2+ пробела: Имя   Значение   Ед   Low – High  (Invitro, Gemotest)
+    new RegExp(`^${name}\\s{2,}(${num})\\s+(${unit})\\s+${ref}`),
+    // 2+ пробела без диапазона
+    new RegExp(`^${name}\\s{2,}(${num})\\s+(${unit})\\s*$`),
+    // Pipe: Имя | Значение | Ед | Low – High
+    new RegExp(`^${name}\\s*\\|\\s*(${num})\\s*\\|\\s*(${unit})\\s*\\|\\s*${ref}`),
+    // Одиночный пробел (строгий): Кириллица Значение Ед Low – High
+    new RegExp(`^([А-ЯЁа-яё][А-ЯЁа-яё0-9 /,()\\.\\-]{1,45}?)\\s+(${num})\\s+(${unit})\\s+${ref}`),
+    // Одиночный пробел без диапазона
+    new RegExp(`^([А-ЯЁа-яё][А-ЯЁа-яё0-9 /,()\\.\\-]{1,45}?)\\s+(${num})\\s+(${unit})\\s*$`),
+  ];
+
+  const skipWords = /^(дата|время|пациент|врач|номер|бланк|страниц|единиц|референс|анализ|исследование|материал|статус|готов|заказ|лаборатор|пол:|возраст|телефон|адрес|www|http|©|итого|выдан|подпись)/i;
+
+  const toNum = s => parseFloat((s || '').replace(',', '.')) || '';
+
   const lines = rawText.split(/\n/).map(l => l.trim()).filter(l => l.length > 3);
   const results = [];
-  const skipWords = /^(дата|время|пациент|врач|номер|бланк|страниц|результат|единиц|референс|норма|анализ|исследование|материал|статус|готов|заказ|лаборатор|пол:|возраст|телефон|адрес|www|http|©|итого|выдан|подпись)/i;
-
-  // Pattern 1: Name   Value   Unit   Low - High  (standard format)
-  const re1 = /^(.{3,45?}?)\s{2,}([\d][.,\d]*)\s+([\S]{1,15})\s+([\d.,]+)\s*[-–—]\s*([\d.,]+)/;
-  // Pattern 2: Name   Value   Unit  (no ref range)
-  const re2 = /^(.{3,45?}?)\s{2,}([\d][.,\d]*)\s+([\S]{1,15})\s*$/;
-  // Pattern 3: pipe/tab separated  Name | Value | Unit | Ref
-  const re3 = /^(.{3,40?}?)[|\t]([\d.,]+)[|\t]([\S]{1,15})[|\t]([\d.,]+)\s*[-–—]\s*([\d.,]+)/;
 
   for (const line of lines) {
     if (skipWords.test(line)) continue;
-    if (line.length < 6 || line.length > 200) continue;
-    // Skip lines that are mostly numbers (table borders, dates)
-    if (/^\d[\d\s\/\-.:,]+$/.test(line)) continue;
+    if (line.length < 5 || line.length > 250) continue;
+    if (/^\d[\d\s/\-.,:]+$/.test(line)) continue; // строка только из цифр
 
-    let m = line.match(re3) || line.match(re1);
-    if (m) {
-      const name = cleanParamName(m[1]);
-      if (!name || name.length < 2) continue;
+    for (const re of patterns) {
+      const m = line.match(re);
+      if (!m) continue;
+      const pName = cleanParamName(m[1]);
+      if (!pName || pName.length < 2) break;
+      const refs = getPersonalizedRefs(pName);
+      const hasRef = m[4] !== undefined; // шаблоны с диапазоном имеют 5 групп
       results.push({
-        name,
+        name:    pName,
         value:   m[2].replace(',', '.'),
         unit:    m[3].replace(/[↑↓▲▼!*]/g, '').trim(),
-        refLow:  parseFloat(m[4].replace(',', '.')) || '',
-        refHigh: parseFloat(m[5].replace(',', '.')) || '',
+        refLow:  hasRef ? toNum(m[4]) : (refs?.refLow  || ''),
+        refHigh: hasRef ? toNum(m[5]) : (refs?.refHigh || ''),
       });
-      continue;
-    }
-    m = line.match(re2);
-    if (m) {
-      const name = cleanParamName(m[1]);
-      if (!name || name.length < 2) continue;
-      // Try personalized refs as fallback
-      const refs = getPersonalizedRefs(name);
-      results.push({ name, value: m[2].replace(',', '.'), unit: m[3].trim(), refLow: refs?.refLow || '', refHigh: refs?.refHigh || '' });
+      break;
     }
   }
-  // Deduplicate by name
+
   const seen = new Set();
   return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
 }
@@ -1124,7 +1136,7 @@ function renderCharts() {
     if (refLow && refLow > 0) datasets.push({ label: 'Нижняя норма', data: sorted.map(() => refLow), borderColor: 'rgba(245,158,11,0.4)', borderDash: [4, 4], pointRadius: 0, fill: false });
 
     if (charts[name]) charts[name].destroy();
-    charts[name] = new Chart(ctx, {
+    charts[name] = new window.Chart(ctx, {
       type: 'line',
       data: { labels: sorted.map(p => formatDate(p.date)), datasets },
       options: {

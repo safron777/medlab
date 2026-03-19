@@ -105,7 +105,8 @@ app.put('/api/auth/profile', auth, async (req, res) => {
     const users = readJSON(USERS_FILE);
     const idx = users.findIndex(u => u.id === req.user.id);
     if (idx === -1) return res.status(404).json({ error: 'Not found' });
-    if (name) users[idx].name = name;
+    if (!name) return res.status(400).json({ error: 'Name required' });
+    users[idx].name = name;
     if (sex !== undefined) users[idx].sex = sex;
     if (birthDate !== undefined) users[idx].birthDate = birthDate;
     writeJSON(USERS_FILE, users);
@@ -201,8 +202,9 @@ app.put('/api/tests/:id', auth, (req, res) => {
 
 app.delete('/api/tests/:id', auth, (req, res) => {
   const tests = readJSON(TESTS_FILE);
-  const filtered = tests.filter(t => !(t.id === req.params.id && t.userId === req.user.id));
-  writeJSON(TESTS_FILE, filtered);
+  const exists = tests.find(t => t.id === req.params.id && t.userId === req.user.id);
+  if (!exists) return res.status(404).json({ error: 'Not found' });
+  writeJSON(TESTS_FILE, tests.filter(t => t.id !== req.params.id));
   res.json({ success: true });
 });
 
