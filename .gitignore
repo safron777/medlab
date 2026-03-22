@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 medlab/data/users.json
 medlab/data/tests.json
+medlab/data/*.db
+medlab/data/*.db-shm
+medlab/data/*.db-wal

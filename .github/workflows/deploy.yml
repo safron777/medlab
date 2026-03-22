@@ -1,0 +1,86 @@
+name: Deploy Medlab
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BOT_VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.BOT_VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.BOT_VPS_HOST }}
+          VPS_USER: ${{ secrets.BOT_VPS_USER }}
+          VPS_PORT: ${{ secrets.BOT_VPS_PORT }}
+          REPO_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MEDLAB_JWT_SECRET: ${{ secrets.MEDLAB_JWT_SECRET }}
+          MEDLAB_SMTP_HOST: ${{ secrets.MEDLAB_SMTP_HOST }}
+          MEDLAB_SMTP_PORT: ${{ secrets.MEDLAB_SMTP_PORT }}
+          MEDLAB_SMTP_USER: ${{ secrets.MEDLAB_SMTP_USER }}
+          MEDLAB_SMTP_PASS: ${{ secrets.MEDLAB_SMTP_PASS }}
+          MEDLAB_SMTP_FROM: ${{ secrets.MEDLAB_SMTP_FROM }}
+        run: |
+          : "${VPS_PORT:=22}"
+          CLONE_URL="https://x-access-token:${REPO_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          ssh -i ~/.ssh/id_rsa -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" bash -s <<EOF
+          set -euo pipefail
+
+          # ── Clone / update repo ─────────────────────────────────────────────
+          if [ -d /opt/medlab_repo/.git ]; then
+            cd /opt/medlab_repo
+            git fetch origin main
+            git reset --hard origin/main
+          else
+            rm -rf /opt/medlab_repo
+            git clone "$CLONE_URL" /opt/medlab_repo
+          fi
+
+          cd /opt/medlab_repo
+
+          # ── Build Docker image ──────────────────────────────────────────────
+          docker build -t medlab:latest ./medlab
+
+          # ── Ensure data volume directory exists ─────────────────────────────
+          mkdir -p /opt/medlab/data
+
+          # ── Replace container ───────────────────────────────────────────────
+          if docker ps -a --format '{{.Names}}' | grep -Eq '^medlab$'; then
+            docker stop medlab || true
+            docker rm   medlab || true
+          fi
+
+          docker run -d \
+            --name medlab \
+            --restart always \
+            -p 127.0.0.1:3002:3000 \
+            -v /opt/medlab/data:/data \
+            -e NODE_ENV=production \
+            -e JWT_SECRET="$MEDLAB_JWT_SECRET" \
+            -e SMTP_HOST="$MEDLAB_SMTP_HOST" \
+            -e SMTP_PORT="$MEDLAB_SMTP_PORT" \
+            -e SMTP_USER="$MEDLAB_SMTP_USER" \
+            -e SMTP_PASS="$MEDLAB_SMTP_PASS" \
+            -e SMTP_FROM="$MEDLAB_SMTP_FROM" \
+            medlab:latest
+
+          # ── Smoke test ──────────────────────────────────────────────────────
+          sleep 3
+          curl -sf http://localhost:3002/health || (docker logs medlab --tail 50 && exit 1)
+
+          echo "Medlab deployed successfully"
+          EOF
