@@ -9,17 +9,12 @@ RUN npm ci --omit=dev
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Non-root user for security
-RUN addgroup -S medlab && adduser -S medlab -G medlab
-
 # Copy dependencies and source
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Data directory (SQLite database lives here)
-RUN mkdir -p /data && chown medlab:medlab /data
-
-USER medlab
+RUN mkdir -p /data
 
 ENV NODE_ENV=production \
     PORT=3000 \
