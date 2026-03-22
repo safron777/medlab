@@ -4,17 +4,31 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate": "node scripts/migrate-from-json.js",
+    "test": "PORT=4000 node server.js & sleep 1 && node --test tests/e2e.test.js; pkill -f 'node server.js'",
+    "test:unit": "vitest run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "lowdb": "^1.0.0"
+    "lowdb": "^1.0.0",
+    "morgan": "^1.10.1",
+    "nodemailer": "^8.0.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "jsdom": "^29.0.1",
+    "vitest": "^4.1.0"
   }
 }

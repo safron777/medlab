@@ -1,5 +1,21 @@
-const CACHE_NAME = 'medlab-v2';
-const ASSETS = ['/', '/index.html', '/css/app.css', '/js/app.js'];
+const CACHE_NAME = 'medlab-v5';
+const ASSETS = [
+  '/',
+  '/index.html',
+  '/css/app.css',
+  '/js/app.js',
+  '/js/state.js',
+  '/js/utils.js',
+  '/js/constants.js',
+  '/js/api.js',
+  '/js/navigation.js',
+  '/js/auth.js',
+  '/js/members.js',
+  '/js/tests.js',
+  '/js/dashboard.js',
+  '/js/charts.js',
+  '/js/pdf-import.js',
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));

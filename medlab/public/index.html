@@ -43,6 +43,7 @@
         <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
       </div>
       <button class="btn btn-primary btn-full mt-3" onclick="login()" id="login-btn">Войти</button>
+      <div class="text-center mt-2"><button class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--text-3)" onclick="openResetPassword()">Забыли пароль?</button></div>
     </div>
     <!-- Register -->
     <div id="register-form" class="hidden">
@@ -256,6 +257,16 @@
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
         </div>
+        <div class="settings-item" onclick="exportCsv()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(16,185,129,0.1)">📊</div>
+            <div>
+              <div class="settings-item-title">Скачать CSV</div>
+              <div class="settings-item-sub">Все показатели для Excel / Таблиц</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
         <div class="settings-item" onclick="importData()">
           <div class="settings-item-left">
             <div class="settings-item-icon" style="background:rgba(59,130,246,0.1)">📥</div>
@@ -266,10 +277,19 @@
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"><path d="m9 18 6-6-6-6"/></svg>
         </div>
-        <div class="settings-item" onclick="if(confirm('Выйти из аккаунта?')) logout()">
+        <div class="settings-item" onclick="if(confirm('Выйти из аккаунта?')) logout().catch(()=>{})">
           <div class="settings-item-left">
             <div class="settings-item-icon" style="background:rgba(239,68,68,0.1)">🚪</div>
             <div><div class="settings-item-title text-red">Выйти</div></div>
+          </div>
+        </div>
+        <div class="settings-item" onclick="openDeleteAccount()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon" style="background:rgba(239,68,68,0.12)">🗑</div>
+            <div>
+              <div class="settings-item-title text-red">Удалить аккаунт</div>
+              <div class="settings-item-sub">Все данные будут удалены навсегда</div>
+            </div>
           </div>
         </div>
       </div>
@@ -296,6 +316,55 @@
       Профиль
     </button>
   </nav>
+</div>
+
+<!-- ══════ MODAL: Delete Account ══════ -->
+<div class="overlay" id="delete-account-overlay" onclick="closeOverlayIfBg(event,'delete-account-overlay')">
+  <div class="drawer" style="max-height:360px">
+    <div class="drawer-handle"></div>
+    <div class="drawer-title" style="color:var(--red)">Удалить аккаунт</div>
+    <div style="padding:0 24px 24px">
+      <p style="color:var(--text-2);font-size:14px;margin-bottom:16px">Все ваши данные, анализы и профили членов семьи будут удалены <strong>навсегда</strong>. Это действие нельзя отменить.</p>
+      <div class="form-group">
+        <label class="form-label">Введите пароль для подтверждения</label>
+        <input type="password" id="delete-account-password" class="form-input" placeholder="••••••••">
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeOverlay('delete-account-overlay')">Отмена</button>
+        <button class="btn btn-danger" style="flex:1" onclick="deleteAccount()" id="delete-account-btn">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ MODAL: Reset Password ══════ -->
+<div class="overlay" id="reset-password-overlay" onclick="closeOverlayIfBg(event,'reset-password-overlay')">
+  <div class="drawer" style="max-height:420px">
+    <div class="drawer-handle"></div>
+    <div class="drawer-title">Сброс пароля</div>
+    <div style="padding:0 24px 24px">
+      <div id="reset-step-1">
+        <p style="color:var(--text-2);font-size:14px;margin-bottom:16px">Введите email вашего аккаунта. Вы получите токен для сброса пароля.</p>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="reset-email" class="form-input" placeholder="your@email.com">
+        </div>
+        <button class="btn btn-primary btn-full mt-2" onclick="requestPasswordReset()" id="reset-request-btn">Получить токен</button>
+      </div>
+      <div id="reset-step-2" class="hidden">
+        <div id="reset-token-info" style="background:rgba(0,201,167,0.1);border-radius:12px;padding:12px;margin-bottom:16px;font-size:13px;word-break:break-all;color:var(--text-2)"></div>
+        <div class="form-group">
+          <label class="form-label">Токен сброса</label>
+          <input type="text" id="reset-token-input" class="form-input" placeholder="Вставьте токен">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Новый пароль</label>
+          <input type="password" id="reset-new-password" class="form-input" placeholder="Минимум 8 символов">
+        </div>
+        <button class="btn btn-primary btn-full mt-2" onclick="confirmPasswordReset()" id="reset-confirm-btn">Сменить пароль</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════ DRAWER: Add/Edit Test ══════ -->
@@ -356,10 +425,10 @@
         <textarea id="test-notes" class="form-input" placeholder="Самочувствие, вопросы к врачу..."></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">Прикрепить файл <span class="text-muted text-xs">(фото бланка, PDF, до 3 МБ)</span></label>
+        <label class="form-label">Прикрепить файлы <span class="text-muted text-xs">(фото бланка, PDF, до 10 МБ каждый)</span></label>
         <div class="attachment-zone" id="attachment-zone">
-          <span id="attachment-zone-label">📎 Нажмите или перетащите файл</span>
-          <input type="file" id="test-attachment" accept="image/*,.pdf" onchange="handleAttachmentChange(this)">
+          <span id="attachment-zone-label">📎 Нажмите или перетащите файл (до 10 МБ)</span>
+          <input type="file" id="test-attachment" accept="image/*,.pdf" multiple onchange="handleAttachmentChange(this)">
         </div>
         <div class="attachment-preview" id="attachment-preview"></div>
       </div>
@@ -534,6 +603,6 @@
   </div>
 </div>
 
-<script src="/js/app.js"></script>
+<script type="module" src="/js/app.js"></script>
 </body>
 </html>
