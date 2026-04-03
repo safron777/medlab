@@ -2,10 +2,10 @@
 // AUTH & PROFILE
 // ══════════════════════════════════════════════════════
 import {
-  token, setToken, currentUser, setCurrentUser, setTests,
+  setToken, currentUser, setCurrentUser, setTests,
 } from './state.js';
 import { apiFetch, renderBackupStatus } from './api.js';
-import { toast, calcAge, todayStr } from './utils.js';
+import { toast, calcAge } from './utils.js';
 import { openOverlay, closeOverlay } from './navigation.js';
 import { updateNotifStatusLabel } from './dashboard.js';
 import { escapeHTML } from './utils.js';
@@ -43,7 +43,7 @@ export async function register() {
   const sex       = document.getElementById('reg-sex').value || null;
   const birthDate = document.getElementById('reg-birthdate').value || null;
   if (!name || !email || !password) return toast('Заполните все поля', 'error');
-  if (password.length < 6) return toast('Пароль минимум 6 символов', 'error');
+  if (password.length < 8) return toast('Пароль минимум 8 символов', 'error');
   const btn = document.getElementById('register-btn');
   btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>';
   try {
