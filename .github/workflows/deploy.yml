@@ -31,8 +31,10 @@ jobs:
           MEDLAB_SMTP_HOST: ${{ secrets.MEDLAB_SMTP_HOST }}
           MEDLAB_SMTP_PORT: ${{ secrets.MEDLAB_SMTP_PORT }}
           MEDLAB_SMTP_USER: ${{ secrets.MEDLAB_SMTP_USER }}
-          MEDLAB_SMTP_PASS: ${{ secrets.MEDLAB_SMTP_PASS }}
+          MEDLAB_SMTP_PASS: ${{ secrets.MEDLAB_MAIL_PASS }}
           MEDLAB_SMTP_FROM: ${{ secrets.MEDLAB_SMTP_FROM }}
+          MEDLAB_SMTP_SECURE: "true"
+          MEDLAB_APP_URL: "https://medlab.stoictracker.app"
         run: |
           : "${VPS_PORT:=22}"
           CLONE_URL="https://x-access-token:${REPO_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -76,6 +78,8 @@ jobs:
             -e SMTP_USER="$MEDLAB_SMTP_USER" \
             -e SMTP_PASS="$MEDLAB_SMTP_PASS" \
             -e SMTP_FROM="$MEDLAB_SMTP_FROM" \
+            -e SMTP_SECURE="$MEDLAB_SMTP_SECURE" \
+            -e APP_URL="$MEDLAB_APP_URL" \
             medlab:latest
 
           # ── Smoke test ──────────────────────────────────────────────────────
