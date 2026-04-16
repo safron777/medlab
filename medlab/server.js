@@ -161,22 +161,29 @@ app.delete('/api/account', auth, async (req, res) => {
   }
 });
 
+// Atomic helper: replace any existing reset token for a user
+const upsertResetToken = db.transaction((userId, token, expiresAt) => {
+  db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(userId);
+  db.prepare('INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expiresAt);
+});
+
 // Password reset — step 1: request token
 app.post('/api/auth/reset-password-request', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: 'Valid email required' });
+    }
+    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim());
     // Always return 200 to avoid email enumeration
     if (!user) return res.json({ success: true });
 
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 3600_000).toISOString(); // 1 hour
-    db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(user.id);
-    db.prepare('INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
+    upsertResetToken(user.id, token, expiresAt);
 
     const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-    const result  = await sendPasswordReset(email, token, baseUrl);
+    const result  = await sendPasswordReset(email.trim(), token, baseUrl);
 
     // Dev mode (no SMTP): return token in response so the UI can prefill it
     res.json({ success: true, ...(result.devToken ? { token: result.devToken, expiresIn: '1 час' } : {}) });

@@ -68,8 +68,13 @@ async function sendPasswordReset(to, token, baseUrl) {
 
   const text = `MedLab — сброс пароля\n\nСсылка для сброса (действует 1 час):\n${resetUrl}\n\nЕсли вы не запрашивали сброс — проигнорируйте это письмо.`;
 
-  await getTransporter().sendMail({ from, to, subject, html, text });
-  return { sent: true };
+  try {
+    await getTransporter().sendMail({ from, to, subject, html, text });
+    return { sent: true };
+  } catch (err) {
+    console.error('[mailer] Failed to send password reset email:', err.message);
+    throw new Error('Не удалось отправить письмо. Проверьте настройки SMTP или попробуйте позже.');
+  }
 }
 
 module.exports = { sendPasswordReset, devMode };

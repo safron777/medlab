@@ -86,6 +86,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('medlab_token');
     }
   }
+
+  // Handle password reset link from email (?resetToken=...)
+  const urlParams = new URLSearchParams(window.location.search);
+  const resetToken = urlParams.get('resetToken');
+  if (resetToken) {
+    openResetPassword();
+    // Skip step 1 (email input) — jump straight to step 2 (new password)
+    document.getElementById('reset-step-1').classList.add('hidden');
+    document.getElementById('reset-step-2').classList.remove('hidden');
+    document.getElementById('reset-token-info').textContent = 'Введите новый пароль для вашего аккаунта.';
+    document.getElementById('reset-token-input').value = resetToken;
+    // Remove token from URL without page reload
+    history.replaceState(null, '', window.location.pathname);
+  }
 });
 
 // ── Window exports (for HTML inline handlers) ─────────────────────────────
