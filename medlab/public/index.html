@@ -497,7 +497,7 @@
         <div style="font-size:32px;margin-bottom:8px">📄</div>
         <div style="font-size:14px;font-weight:600;margin-bottom:4px">Перетащите PDF или нажмите</div>
         <div class="text-xs text-muted">Инвитро, Гемотест, Helix и другие</div>
-        <input type="file" id="import-pdf-input" accept=".pdf,application/pdf">
+        <input type="file" id="import-pdf-input" accept=".pdf,application/pdf" multiple>
       </div>
       <div class="divider">или</div>
       <div class="form-group">
@@ -505,6 +505,13 @@
         <textarea id="import-text-input" class="form-input" rows="5" placeholder="Гемоглобин    145    г/л    130 - 170&#10;Глюкоза    5.2    ммоль/л    3.9 - 6.1"></textarea>
       </div>
       <button class="btn btn-primary btn-full" data-action="parseImportText">Распознать</button>
+    </div>
+
+    <!-- Batch progress (multiple files) -->
+    <div id="import-step-batch" class="hidden">
+      <div id="batch-progress-label" style="font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:12px"></div>
+      <div id="batch-file-list" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto"></div>
+      <button class="btn btn-primary btn-full mt-3" id="batch-close-btn" style="display:none" data-action="closeOverlay" data-arg="import-overlay">Закрыть</button>
     </div>
 
     <div id="import-step-2" class="hidden">

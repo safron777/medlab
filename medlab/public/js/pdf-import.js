@@ -22,53 +22,125 @@ export function resetImport() {
   importedParams = [];
   document.getElementById('import-step-1')?.classList.remove('hidden');
   document.getElementById('import-step-2')?.classList.add('hidden');
+  document.getElementById('import-step-batch')?.classList.add('hidden');
   const inp  = document.getElementById('import-pdf-input');
   if (inp) inp.value = '';
   const txt  = document.getElementById('import-text-input');
   if (txt) txt.value = '';
   const zone = document.getElementById('import-drop-zone');
   if (zone) zone.classList.remove('drag-over');
+  const closeBtn = document.getElementById('batch-close-btn');
+  if (closeBtn) closeBtn.style.display = 'none';
+}
+
+async function extractPDFText(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js не загружен');
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let fullText = '';
+  for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+    const page    = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const items   = content.items.sort((a, b) =>
+      Math.round(b.transform[5] / 5) * 5 - Math.round(a.transform[5] / 5) * 5 ||
+      a.transform[4] - b.transform[4]
+    );
+    let lastY = null, line = [];
+    for (const item of items) {
+      const y = Math.round(item.transform[5] / 4) * 4;
+      if (lastY !== null && Math.abs(y - lastY) > 6) { fullText += line.join('  ') + '\n'; line = []; }
+      line.push(item.str);
+      lastY = y;
+    }
+    if (line.length) fullText += line.join('  ') + '\n';
+  }
+  return fullText;
+}
+
+function detectDateFromText(text) {
+  const re = /(\d{2})[.\-/](\d{2})[.\-/](\d{4})/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (parseInt(m[3], 10) >= 2000) return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+  return null;
+}
+
+function detectLabFromText(text) {
+  const m = text.match(/инвитро|invitro|гемотест|gemotest|helix|хеликс|ситилаб|citilab/i);
+  return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : '';
 }
 
 export async function handleImportPDF(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  if (files.length > 1) { await processBatch(files); return; }
+
   if (typeof pdfjsLib === 'undefined') { toast('PDF.js не загружен', 'error'); return; }
-  const btn = document.getElementById('import-drop-zone');
-  btn.classList.add('drag-over');
+  const zone = document.getElementById('import-drop-zone');
+  zone.classList.add('drag-over');
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let fullText = '';
-    for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
-      const page    = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const items   = content.items.sort((a, b) =>
-        Math.round(b.transform[5] / 5) * 5 - Math.round(a.transform[5] / 5) * 5 ||
-        a.transform[4] - b.transform[4]
-      );
-      let lastY = null, line = [];
-      for (const item of items) {
-        const y = Math.round(item.transform[5] / 4) * 4;
-        if (lastY !== null && Math.abs(y - lastY) > 6) {
-          fullText += line.join('  ') + '\n';
-          line = [];
-        }
-        line.push(item.str);
-        lastY = y;
-      }
-      if (line.length) fullText += line.join('  ') + '\n';
-    }
+    const fullText = await extractPDFText(files[0]);
     document.getElementById('import-text-input').value = fullText;
-    const labMatch = fullText.match(/инвитро|invitro|гемотест|gemotest|helix|хеликс|ситилаб|citilab/i);
-    if (labMatch) {
-      document.getElementById('import-test-lab').value =
-        labMatch[0].charAt(0).toUpperCase() + labMatch[0].slice(1).toLowerCase();
-    }
+    const lab = detectLabFromText(fullText);
+    if (lab) document.getElementById('import-test-lab').value = lab;
     parseImportText();
   } catch (e) {
     toast('Ошибка чтения PDF: ' + e.message, 'error');
-    btn.classList.remove('drag-over');
+    zone.classList.remove('drag-over');
+  }
+}
+
+async function processBatch(files) {
+  document.getElementById('import-step-1').classList.add('hidden');
+  document.getElementById('import-step-2').classList.add('hidden');
+  const batchEl  = document.getElementById('import-step-batch');
+  const labelEl  = document.getElementById('batch-progress-label');
+  const listEl   = document.getElementById('batch-file-list');
+  const closeBtn = document.getElementById('batch-close-btn');
+  batchEl.classList.remove('hidden');
+
+  listEl.innerHTML = files.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2,rgba(0,0,0,.04));border-radius:8px">
+      <span id="bi-icon-${i}" style="font-size:16px;min-width:20px">⏳</span>
+      <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(f.name.replace(/\.pdf$/i, ''))}</span>
+      <span id="bi-result-${i}" style="font-size:12px;color:var(--text-3);white-space:nowrap">—</span>
+    </div>`).join('');
+
+  let saved = 0, failed = 0;
+  for (let i = 0; i < files.length; i++) {
+    labelEl.textContent = `Обрабатываю ${i + 1} из ${files.length}...`;
+    const iconEl   = document.getElementById(`bi-icon-${i}`);
+    const resultEl = document.getElementById(`bi-result-${i}`);
+    try {
+      const text   = await extractPDFText(files[i]);
+      const params = parseLabText(text);
+      if (!params.length) throw new Error('Показатели не распознаны');
+      const date = detectDateFromText(text) || todayStr();
+      const lab  = detectLabFromText(text);
+      const name = files[i].name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ') || `Анализ от ${date}`;
+      await apiFetch('/api/tests', 'POST', {
+        name, date, lab, category: 'other',
+        parameters: params.map(p => ({
+          name: p.name, value: String(p.value), unit: p.unit,
+          refLow: String(p.refLow), refHigh: String(p.refHigh),
+        })),
+        memberId: currentMemberId || undefined,
+      });
+      iconEl.textContent  = '✅';
+      resultEl.textContent = `${params.length} показателей`;
+      saved++;
+    } catch (e) {
+      iconEl.textContent  = '❌';
+      resultEl.textContent = e.message;
+      failed++;
+    }
+  }
+
+  labelEl.textContent = `Готово: сохранено ${saved}${failed ? `, ошибок ${failed}` : ''}`;
+  closeBtn.style.display = '';
+  if (saved > 0) {
+    const { loadTests } = await import('./tests.js');
+    loadTests(1);
   }
 }
 
