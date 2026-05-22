@@ -1,4 +1,4 @@
-const CACHE_NAME = 'medlab-v5';
+const CACHE_NAME = 'medlab-v6';
 const ASSETS = [
   '/',
   '/index.html',
