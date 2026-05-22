@@ -11,6 +11,7 @@ const path        = require('path');
 const compression = require('compression');
 
 const { db, newId } = require('./db');
+const { runBackup }        = require('./scripts/backup');
 const { sendPasswordReset } = require('./lib/mailer');
 const { validate } = require('./middleware/validate');
 const { registerSchema, loginSchema, profileSchema } = require('./validators/auth.schemas');
@@ -33,7 +34,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:      ["'self'"],
-      scriptSrc:       ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "blob:"],
+      scriptSrc:       ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
       styleSrc:        ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
       fontSrc:         ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
       workerSrc:       ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
@@ -125,7 +126,8 @@ app.post('/api/auth/register', authLimiter, validate(registerSchema), async (req
     const token = jwt.sign({ id, email, name, jti }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id, email, name, sex: sex || null, birthDate: birthDate || null } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -142,7 +144,8 @@ app.post('/api/auth/login', authLimiter, validate(loginSchema), async (req, res)
     const token = jwt.sign({ id: user.id, email: user.email, name: user.name, jti }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, sex: user.sex, birthDate: user.birth_date } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -157,7 +160,8 @@ app.delete('/api/account', auth, async (req, res) => {
     db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -185,10 +189,14 @@ app.post('/api/auth/reset-password-request', authLimiter, async (req, res) => {
     const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const result  = await sendPasswordReset(email.trim(), token, baseUrl);
 
-    // Dev mode (no SMTP): return token in response so the UI can prefill it
-    res.json({ success: true, ...(result.devToken ? { token: result.devToken, expiresIn: '1 час' } : {}) });
+    // Dev mode only: return token in response so the UI can prefill it (never in production)
+    const devPayload = process.env.NODE_ENV !== 'production' && result.devToken
+      ? { token: result.devToken, expiresIn: '1 час' }
+      : {};
+    res.json({ success: true, ...devPayload });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -209,7 +217,8 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
     db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?').run(token);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -376,7 +385,8 @@ app.post('/api/tests', auth, validate(testBodySchema), (req, res) => {
     saveTest(req.user.id, testId, req.body);
     res.json(getTestWithParams(testId));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -415,7 +425,8 @@ app.put('/api/tests/:id', auth, validate(testBodySchema), (req, res) => {
     updateTest(req.params.id, req.user.id, req.body);
     res.json(getTestWithParams(req.params.id));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -531,7 +542,8 @@ app.post('/api/import', auth, (req, res) => {
     const result = doImport();
     res.json({ success: true, ...result });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[server]', e);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -540,4 +552,15 @@ app.get('/{*path}', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`MedLab running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`MedLab running on http://localhost:${PORT}`);
+
+  // Daily DB backup (run immediately on start, then every 24 h)
+  runBackup();
+  setInterval(runBackup, 24 * 60 * 60 * 1000);
+
+  // Hourly cleanup of expired JWT blacklist entries
+  setInterval(() => {
+    db.prepare(`DELETE FROM jwt_blacklist WHERE expires_at < datetime('now')`).run();
+  }, 60 * 60 * 1000);
+});

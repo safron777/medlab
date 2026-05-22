@@ -20,7 +20,7 @@ import {
 } from './members.js';
 import {
   openImportOverlay, handleImportPDF, parseImportText,
-  confirmImport, updateImportRef, removeImportRow, updateImportParamField,
+  confirmImport, resetImport, updateImportRef, removeImportRow, updateImportParamField,
 } from './pdf-import.js';
 import {
   loadTests, filterTests, selectCategory, showTestDetail,
@@ -28,6 +28,11 @@ import {
   handleAttachmentChange, removeAttachment, printTestReport, printFullReport, loadQuickParams,
 } from './tests.js';
 import { toggleNotifications } from './dashboard.js';
+
+// ── Logout with confirm ───────────────────────────────────────────────────
+function logoutConfirm() {
+  if (confirm('Выйти из аккаунта?')) logout().catch(() => {});
+}
 
 // ── JSON Backup import (inline — uses apiFetch from api.js) ────────────────
 async function importData() {
@@ -76,6 +81,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('test-date').value = todayStr();
   initNavigationListeners();
 
+  // Global delegated click handler — replaces all onclick= attributes
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
+    const arg    = el.dataset.arg;
+    const fn     = window[action];
+    if (typeof fn !== 'function') return;
+    if (action === 'selectCategory')    fn(el, arg);
+    else if (action === 'closeOverlayIfBg') fn(e, arg);
+    else if (arg !== undefined)         fn(arg);
+    else                                fn();
+  });
+
+  // Delegated input/change handlers — replaces oninput= and onchange= attributes
+  document.getElementById('search-input')
+    ?.addEventListener('input', () => filterTests());
+  document.getElementById('test-attachment')
+    ?.addEventListener('change', function () { handleAttachmentChange(this); });
+  document.getElementById('import-pdf-input')
+    ?.addEventListener('change', function () { handleImportPDF(this); });
+
   if (token) {
     try {
       const res = await apiFetch('/api/auth/me');
@@ -122,10 +149,12 @@ Object.assign(window, {
   handleAttachmentChange, removeAttachment,
   // PDF import
   openImportOverlay, handleImportPDF, parseImportText,
-  confirmImport, updateImportRef, removeImportRow,
+  confirmImport, resetImport, updateImportRef, removeImportRow,
   importedParams_update: updateImportParamField,
   // JSON import / export / CSV
   exportData, exportCsv, importData,
   // Notifications
   toggleNotifications,
+  // Auth helpers
+  logoutConfirm,
 });
