@@ -18,6 +18,25 @@ export function openImportOverlay() {
   openOverlay('import-overlay');
 }
 
+// Called once on module load — wires drag-and-drop on the drop zone
+function initDropZone() {
+  const zone = document.getElementById('import-drop-zone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', async e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) await handleImportFiles(Array.from(e.dataTransfer.files));
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDropZone);
+} else {
+  initDropZone();
+}
+
 export function resetImport() {
   importedParams = [];
   document.getElementById('import-step-1')?.classList.remove('hidden');
@@ -70,8 +89,7 @@ function detectLabFromText(text) {
   return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : '';
 }
 
-export async function handleImportPDF(input) {
-  const files = Array.from(input.files);
+export async function handleImportFiles(files) {
   if (!files.length) return;
   if (files.length > 1) { await processBatch(files); return; }
 
@@ -88,6 +106,10 @@ export async function handleImportPDF(input) {
     toast('Ошибка чтения PDF: ' + e.message, 'error');
     zone.classList.remove('drag-over');
   }
+}
+
+export async function handleImportPDF(input) {
+  await handleImportFiles(Array.from(input.files));
 }
 
 async function processBatch(files) {
