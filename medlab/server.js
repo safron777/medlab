@@ -11,7 +11,7 @@ const path        = require('path');
 const compression = require('compression');
 
 const { db, newId } = require('./db');
-const { runBackup }        = require('./scripts/backup');
+const { runBackup }        = require('./lib/backup');
 const { sendPasswordReset } = require('./lib/mailer');
 const { validate } = require('./middleware/validate');
 const { registerSchema, loginSchema, profileSchema } = require('./validators/auth.schemas');
